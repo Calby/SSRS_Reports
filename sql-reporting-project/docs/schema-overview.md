@@ -3,23 +3,45 @@
 Reference document for the CaseWorthy (ClientTrack) and ServTracker databases.
 Update this file when new tables, views, or relationships are confirmed.
 
-Last updated: [YYYY-MM-DD]
+Last updated: 2026-04-05
 
 ---
 
 ## CaseWorthy (ClientTrack)
 
+### Core Concept: Everything Is an Entity
+
+The `Entity` table is the root of CaseWorthy. Every person and organization —
+clients, staff, providers — starts as an Entity with a universal `EntityID`.
+Specialized tables extend it:
+
+```
+Entity (EntityID)
+  ├── Client      (demographics, DOB, SSN, veteran status)
+  ├── Users       (login, role, supervisor, active status)
+  ├── Provider    (provider name, address)
+  └── Organization (org name, structure)
+```
+
+**Key insight:** `ClientID` in most tables is actually an `EntityID`. Staff
+members are also entities — `WorkHistory.ClientID` refers to the staff member,
+not a client being served.
+
 ### Client & Demographics
 ```
 Client
-  ├── ClientID (PK)
+  ├── EntityID (PK — same as Entity.EntityID)
   ├── FirstName, LastName, NameSuffix
   ├── SSN (partial/full)
-  └── [other base fields]
+  ├── VeteranStatus
+  ├── X_Office              -- custom SVDP field (ListItem → 1000000403)
+  ├── X_ShallowSubsidyStatus
+  ├── X_ReferredFromHUDVASH
+  └── [audit columns: DeletedDate, CreatedDate, LastModifiedDate, etc.]
 
 ClientDemographic
   ├── ClientDemographicID (PK)
-  ├── ClientID (FK → Client)
+  ├── ClientID (FK → Entity.EntityID)
   ├── DateOfBirth
   ├── Gender, Race, Ethnicity
   ├── VeteranStatus
@@ -27,20 +49,42 @@ ClientDemographic
 ```
 
 ### Enrollment & Program
+
+Clients connect to programs through a **three-table chain** that supports
+household enrollments:
+```
+Client → EnrollmentMember → Enrollment → Program
+```
+
 ```
 Program
   ├── ProgramID (PK)
   ├── ProgramName
   ├── ProgramType        -- maps to HMIS program type (ES, TH, PSH, RRH, etc.)
+  ├── OrganizationID
   └── SiteID (FK → Site)
 
 Enrollment
   ├── EnrollmentID (PK)
-  ├── ClientID (FK → Client)
   ├── ProgramID (FK → Program)
-  ├── EnrollmentDate
-  ├── ExitDate           -- NULL if still active
-  └── [other enrollment fields]
+  ├── FamilyID            -- groups household members
+  ├── BeginDate
+  ├── EndDate             -- '12/31/9999' means still active (not NULL)
+  ├── Status
+  └── DeletedDate         -- '12/31/9999' = active
+
+EnrollmentMember
+  ├── EnrollmentID (FK → Enrollment)
+  ├── ClientID (FK → Entity.EntityID)
+  ├── BeginDate
+  ├── EndDate             -- '9999-12-31' = active
+  ├── RelationshipToHoH
+  └── DeletedDate         -- NULL = active
+
+EnrollmentHMIS
+  ├── EnrollmentID (FK → Enrollment)
+  ├── MoveInDate          -- NULL = not housed
+  └── DeletedDate
 
 EnrollmentExit
   ├── ExitID (PK)
@@ -50,21 +94,28 @@ EnrollmentExit
   └── ExitReason
 ```
 
-### Assessments
+### Assessments (Parent-Extension Pattern)
+
+One core `Assessment` table with 1:1 extension tables for specific data:
+
 ```
 Assessment
   ├── AssessmentID (PK)
-  ├── ClientID (FK → Client)
+  ├── ClientID (FK → Entity.EntityID)
   ├── EnrollmentID (FK → Enrollment)
-  ├── AssessmentType     -- Entry, Annual, Exit, Update
-  ├── AssessmentDate
-  └── CompletedByUserID
+  ├── AssessmentEvent    -- 1=Entry, 2=During/Update, 3=Exit
+  ├── BeginAssessment
+  └── DeletedDate        -- '12/31/9999' = active
 
-AssessmentQuestion
-  ├── AssessmentQuestionID (PK)
-  ├── AssessmentID (FK → Assessment)
-  ├── QuestionCode       -- HMIS data element code
-  └── ResponseValue
+Extension tables (join 1:1 on AssessmentID):
+  ├── AssessHUDUniversal  (housing status, prior residence, chronic homelessness)
+  ├── AssessHUDProgram    (exit destination, disabling condition, DV, SOAR)
+  ├── XAssessEntry        (client type, referral source, VI-SPDAT, income)
+  ├── Xacuityscale        (11-section acuity scoring)
+  ├── XRiskAssess         (self-harm, safety)
+  ├── XBarrierAssess      (barrier scoring)
+  ├── XClientHousing      (housing preferences)
+  └── XHouseholdBudget    (budget data)
 
 AssessmentSignOff
   ├── SignOffID (PK)
@@ -78,7 +129,7 @@ AssessmentSignOff
 ```
 Services
   ├── ServiceID (PK)
-  ├── ClientID (FK → Client)
+  ├── ClientID (FK → Entity.EntityID)
   ├── EnrollmentID (FK → Enrollment)
   ├── ServiceTypeID (FK → ServiceType)
   ├── ServiceDate
@@ -92,16 +143,70 @@ ServiceType
 
 ### Staff & Sites
 ```
-AppUser
-  ├── UserID (PK)
-  ├── FirstName, LastName
-  ├── Email
-  └── SiteID (FK → Site)
+Entity
+  ├── EntityID (PK)
+  └── EntityName            -- display name for any person/org
+
+Users (extends Entity)
+  ├── EntityID (PK/FK → Entity)
+  ├── Login, Role, ActiveStatus
+  └── SupervisorID
+
+WorkHistory
+  ├── ClientID (FK → Entity.EntityID)  -- "ClientID" here = the staff member
+  ├── ProgramJobTypeID
+  ├── BeginDate, EndDate
+  └── DeletedDate           -- '12/31/9999' = active
+
+CaseManagerAssignment
+  ├── EnrollmentID
+  ├── UserID (FK → Entity.EntityID)
+  ├── BeginDate, EndDate
+  └── DeletedDate           -- '12/31/9999' = active
 
 Site
   ├── SiteID (PK)
   ├── SiteName
   └── [location fields]
+```
+
+### Dropdown Values: ListItem System
+
+Most dropdown fields store an integer ID pointing to the `ListItem` table:
+
+```
+ListItemCategory
+  ├── ListItemCategoryID (PK)
+  └── CategoryName
+
+ListItem
+  ├── ListItemID (PK)
+  ├── ListItemCategoryID (FK)
+  ├── ListItemText
+  └── SortOrder
+```
+
+See docs/caseworthy-listitem-reference.md for confirmed ListItem values.
+
+### Soft-Delete Conventions
+
+CaseWorthy never truly deletes data. Two conventions coexist:
+
+| Convention               | Meaning        | Tables That Use It                                    |
+|--------------------------|----------------|-------------------------------------------------------|
+| `DeletedDate IS NULL`    | Active record  | Client, EnrollmentMember, XSVdPReferral, and others   |
+| `DeletedDate = '12/31/9999'` | Active record  | Enrollment, Assessment, WorkHistory, CaseManagerAssignment |
+
+**Every table in every query must include a soft-delete filter.** See
+.claude/rules/schema-notes.md for join patterns with correct filters.
+
+### Audit Columns (present on every table)
+
+```
+CreatedBy, CreatedDate, CreatedFormID
+LastModifiedBy, LastModifiedDate, LastModifiedFormID
+DeletedBy, DeletedDate
+OwnedByOrgID, OrgGroupID, WriteOrgGroupID
 ```
 
 ---

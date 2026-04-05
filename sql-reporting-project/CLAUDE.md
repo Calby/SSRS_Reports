@@ -33,6 +33,11 @@ See .claude/rules/sql-style.md — CTEs first, ALL CAPS keywords, aliased column
 ## Schema Reference
 See .claude/rules/schema-notes.md for key tables and join patterns.
 See docs/schema-overview.md for full schema map.
+See docs/caseworthy-schema-reference.md for comprehensive table/relationship reference.
+See docs/caseworthy-erd.md for entity relationship diagrams (Mermaid).
+See docs/caseworthy-schema-guide.md for conceptual guide to CaseWorthy's design patterns.
+See docs/caseworthy-listitem-reference.md for confirmed ListItem/dropdown values.
+See docs/sql-guide-caseworthy.md for SQL tutorial using CaseWorthy examples.
 
 ## HMIS Compliance
 See .claude/rules/hmis-compliance.md for data element rules and program type logic.
