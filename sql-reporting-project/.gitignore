@@ -1,0 +1,21 @@
+# Personal Claude overrides
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Working scratch folder
+scratch/
+
+# OS and editor junk
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+
+# Connection strings and credentials — NEVER commit these
+*.config
+appsettings*.json
+connection.txt
+credentials.txt
+
+# Generated outputs
+exports/

@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sqlcmd:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Read(**/*.sql)",
+      "Read(**/*.rdl)",
+      "Read(**/*.md)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(DROP:*)",
+      "Bash(TRUNCATE:*)",
+      "Read(.env:*)",
+      "Read(connection.txt)",
+      "Read(credentials.txt)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Claude Code] File written. Remember to update report-index.md if this is a new report.'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
